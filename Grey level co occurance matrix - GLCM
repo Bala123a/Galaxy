@@ -1,0 +1,141 @@
+# Libraries
+import numpy as np # For handling nan values,  normalization and other numberical processing
+import matplotlib.pyplot as plt # It is used for visualisation of map and statistical graphs
+
+# Libraries of STAC + raster
+import pystac_client #Searching imagery using STAC in the cataloge 
+import planetary_computer # Accessing satellite imagery from this cateloge 
+import rioxarray as rxr # Used for bridging rater and array to handle CRS metadata and handling of datasets
+
+# GLCM
+from skimage.feature import graycomatrix, graycoprops #grey level co occurance matrix (greycomatix) and textural metrics (graycoprops)
+catalog = pystac_client.Client.open(
+    "https://planetarycomputer.microsoft.com/api/stac/v1",
+    modifier=planetary_computer.sign_inplace,
+)
+bbox_of_interest = [80.2300, 13.0200, 80.3100, 13.0900]  # Chennai area of interest
+time_of_interest = "2019-06-01/2019-06-15"  #date and time
+search = catalog.search(                  #searching the image in microsoft planatary computer with AOIadn time finding the scene Id and time with VV/VH
+    collections=["sentinel-1-grd"],
+    bbox=bbox_of_interest,
+    datetime=time_of_interest,
+    query={
+        "sar:polarizations": {"eq": ["VV", "VH"]},
+        "sar:instrument_mode": {"eq": "IW"},
+    },
+)
+
+s1_item = next(search.items())
+
+print("Scene ID:", s1_item.id)
+print("Acquisition time:", s1_item.datetime)
+vv = rxr.open_rasterio(
+    s1_item.assets["vv"].href,
+    overview_level=3
+).squeeze()
+
+vh = rxr.open_rasterio(
+    s1_item.assets["vh"].href,
+    overview_level=3
+).squeeze()
+
+# Mask invalid pixels # Rmoving the NaN values of the pixels for both VV/VH
+vv = vv.where(vv > 0)
+vh = vh.where(vh > 0)
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+#Ploting the VV and VH backscatter
+ax[0].imshow(vv, cmap="gray")
+ax[0].set_title("Sentinel-1 VV Backscatter")
+ax[0].axis("off")
+
+ax[1].imshow(vh, cmap="gray")
+ax[1].set_title("Sentinel-1 VH Backscatter")
+ax[1].axis("off")
+
+plt.tight_layout()
+plt.show()
+def prepare_sar_for_glcm(sar_da, levels=64):
+    sar = sar_da.values.astype("float32")
+    sar = np.nan_to_num(sar, nan=0)
+
+    # Normalize to Quantize
+    sar_norm = (sar - sar.min()) / (sar.max() - sar.min())
+
+    # Quantize for GLCM
+    sar_q = np.floor(sar_norm * (levels - 1)).astype("uint8")
+
+    return sar_q
+vv_q = prepare_sar_for_glcm(vv, levels=64)
+vh_q = prepare_sar_for_glcm(vh, levels=64)
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+ax[0].imshow(vv_q, cmap="gray")
+ax[0].set_title("Quantized VV (GLCM Input)")
+ax[0].axis("off")
+
+ax[1].imshow(vh_q, cmap="gray")
+ax[1].set_title("Quantized VH (GLCM Input)")
+ax[1].axis("off")
+
+plt.tight_layout()
+plt.show()
+distances = [1, 2]
+angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+levels = 64
+def compute_glcm_textures(img, distances, angles, levels):
+    glcm = graycomatrix(
+        img,
+        distances=distances,
+        angles=angles,
+        levels=levels,
+        symmetric=True,
+        normed=True
+    )
+
+    return {
+        "Contrast": graycoprops(glcm, "contrast").mean(),
+        "Dissimilarity": graycoprops(glcm, "dissimilarity").mean(),
+        "Homogeneity": graycoprops(glcm, "homogeneity").mean(),
+        "ASM": graycoprops(glcm, "ASM").mean(),
+        "Energy": graycoprops(glcm, "energy").mean(),
+        "Correlation": graycoprops(glcm, "correlation").mean(),
+    }
+vv_textures = compute_glcm_textures(vv_q, distances, angles, levels)
+vh_textures = compute_glcm_textures(vh_q, distances, angles, levels)
+
+print("\nGLCM Textures – VV")
+for k, v in vv_textures.items():
+    print(f"{k}: {v:.4f}")
+
+print("\nGLCM Textures – VH")
+for k, v in vh_textures.items():
+    print(f"{k}: {v:.4f}")
+plt.figure(figsize=(6.5, 4))
+plt.bar(
+    vv_textures.keys(),
+    vv_textures.values(),
+    color="0.6",
+    edgecolor="black",
+    linewidth=0.8
+)
+plt.title("GLCM Texture Metrics – Sentinel-1 VV")
+plt.ylabel("Metric value")
+plt.xticks(rotation=30, ha="right")
+plt.grid(axis="y", linestyle="--", alpha=0.6)
+plt.tight_layout()
+plt.show()
+plt.figure(figsize=(6.5, 4))
+plt.bar(
+    vh_textures.keys(),
+    vh_textures.values(),
+    color="0.4",
+    edgecolor="black",
+    linewidth=0.8
+)
+plt.title("GLCM Texture Metrics – Sentinel-1 VH")
+plt.ylabel("Metric value")
+plt.xticks(rotation=30, ha="right")
+plt.grid(axis="y", linestyle="--", alpha=0.6)
+plt.tight_layout()
+plt.show()
