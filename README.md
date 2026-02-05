@@ -1,2 +1,2 @@
 # Galaxy
-Sentinel
+Processing of sentinel datasets
