@@ -2,7 +2,7 @@ This respository implements a cloud native preprocessing pipeline for sentinel 1
 Processing of Sentinel datasets
 Overview of the project work flow 
 
-1. The project implements an end to end preprocessing and feaqture extract pipeline using snetinel 1 SAR and 2optical data accessed via microsoft planetry computer API
+1. The project implements an end to end preprocessing and feature extract pipeline using snetinel 1 SAR and 2 optical data accessed via microsoft planetry computer API
    
  Instalation of Libraries  
 - pystac (Data discovery), 
@@ -35,7 +35,8 @@ GLCM (SAR tecture extraction)
 
  5. NDVI
  
-<img width="607" height="512" alt="download" src="https://github.com/user-attachments/assets/549c8a3a-6420-4ce9-8a04-718449ec15ff" />
+<img width="489" height="496" alt="download" src="https://github.com/user-attachments/assets/07dc1b71-24e5-42dc-b1c7-8bdb1a089969" />
+
 
 All data can be reproducible
 
