@@ -4,7 +4,7 @@ Overview of the project work flow
 
 1. The project implements an end to end preprocessing and feaqture extract pipeline using snetinel 1 SAR and 2optical data accessed via microsoft planetry computer API
    
-- Instalation of Libraries  
+ Instalation of Libraries  
 - pystac (Data discovery), 
 - numpy (numerical operations),
 - rioxarry (raster metadata), 
@@ -13,7 +13,7 @@ Overview of the project work flow
 - scikit-image (texture extraction),
 - matplotlib ( visualization).  
 
-2. Data access via API - AOI, data & time, sentinel collection 1 & 2
+2. Data access via API - AOI, date & time, sentinel scene collection 1 & 2
 
 4. Sentinel preprocessing  - Scene selection (VV/VH) - SPECKLE FILTERING
 
