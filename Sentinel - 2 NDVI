@@ -1,0 +1,78 @@
+#Import and installing libraries 
+import pystac_client
+import planetary_computer
+from pystac.extensions.eo import EOExtension as eo
+
+import rasterio
+from rasterio import windows, features, warp
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Connecting to planetary computer
+catalog = pystac_client.Client.open(
+    "https://planetarycomputer.microsoft.com/api/stac/v1",
+    modifier=planetary_computer.sign_inplace,
+)
+
+# defining AOI with date and time - Chennai
+area_of_interest = {
+    "type": "Polygon",
+    "coordinates": [
+        [
+            [80.2300, 13.0200],
+            [80.3100, 13.0200],
+            [80.3100, 13.0900],
+            [80.2300, 13.0900],
+            [80.2300, 13.0200]
+        ]
+    ]
+}
+
+# Cloud cover == 10%
+time_of_interest = "2019-03-01/2019-05-01"
+search = catalog.search(
+    collections=["sentinel-2-l2a"],
+    intersects=area_of_interest,
+    datetime=time_of_interest,
+    query={"eo:cloud_cover": {"lt": 10}},
+)
+
+#False colour composits and Scene classification Layer (SCL)
+items = search.item_collection()
+item = min(items, key=lambda i: eo.ext(i).cloud_cover)
+assets = item.assets
+red_href = assets["B04"].href   # Red (10 m)
+nir_href = assets["B08"].href   # NIR (10 m)
+scl_href = assets["SCL"].href   # Scene Classification Layer (20m)
+def read_aoi(href):
+    with rasterio.open(href) as ds:
+        bounds = features.bounds(area_of_interest)
+        bounds = warp.transform_bounds("EPSG:4326", ds.crs, *bounds)
+        window = windows.from_bounds(*bounds, transform=ds.transform)
+        return ds.read(1, window=window).astype("float32")
+red = read_aoi(red_href)
+nir = read_aoi(nir_href)
+scl = read_aoi(scl_href)
+
+# Here the SCL was 20 meters and other bands were 10 meters to upsacle was implemented to a common resolution of 10 meters. Using nearest neighbor we converted 20 meters to 10 meters
+scl_upsampled = np.repeat(np.repeat(scl, 2, axis=0), 2, axis=1)
+min_height = min(scl_upsampled.shape[0], nir.shape[0])
+min_width = min(scl_upsampled.shape[1], nir.shape[1])
+scl_upsampled_aligned = scl_upsampled[:min_height, :min_width]
+nir_aligned = nir[:min_height, :min_width]
+red_aligned = red[:min_height, :min_width]
+
+#Normalized Difference Vegetation Index (NDVI) using aligned and upscaled bands
+ndvi = (nir_aligned - red_aligned) / (nir_aligned + red_aligned)
+
+cloud_classes = [3, 8, 9, 10]
+cloud_mask = np.isin(scl_upsampled_aligned, cloud_classes)
+
+ndvi_clean = np.where(cloud_mask, np.nan, ndvi)
+plt.figure(figsize=(6,6))
+plt.imshow(ndvi_clean, cmap="RdYlGn", vmin=0, vmax=1)
+plt.colorbar(label="NDVI")
+plt.title("NDVI Chennai")
+plt.axis("off")
+plt.show()
