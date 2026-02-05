@@ -17,7 +17,7 @@ Overview of the project work flow
 3. Sentinel preprocessing  - Scene selection (VV/VH) - SPECKLE FILTERING - GLCM (SAR tecture extraction)
 4. Sentinel 2 - Scene selection -  Cloud masking (SCL) - Upscaling 10m to 20m - derive NDVI - visualization
 
-All data can be reproducibile 
+All data can be reproducible
 
 Citation 
 Sentinel 1 and sentinel 2 from ESA
