@@ -1,0 +1,81 @@
+import pystac_client
+import planetary_computer
+!pip install rioxarray
+import rioxarray as rxr
+import xarray as xr
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.ndimage import uniform_filter, gaussian_filter
+#Data inherted from microsoft planetary 
+catalog = pystac_client.Client.open(
+    "https://planetarycomputer.microsoft.com/api/stac/v1",
+    modifier=planetary_computer.sign_inplace,
+)
+# Area of Interest and date
+bbox_of_interest = [80.2300, 13.0200, 80.3100, 13.0900]
+time_of_interest = "2019-01-01/2019-12-31"
+
+search = catalog.search(
+    collections=["sentinel-1-grd"],
+    bbox=bbox_of_interest,
+    datetime=time_of_interest,
+    query={
+        "sar:polarizations": {"eq": ["VV", "VH"]},
+        "sar:instrument_mode": {"eq": "IW"},
+    },
+)
+# take first scene
+items = list(search.items())
+item = items[0]   
+vv = rxr.open_rasterio(item.assets["vv"].href, overview_level=2).squeeze()
+vh = rxr.open_rasterio(item.assets["vh"].href, overview_level=2).squeeze()
+
+# Ensure valid pixels
+vv = vv.where(vv > 0)
+vh = vh.where(vh > 0)
+def lee_filter(img, size=7):
+    img = img.values
+    mean = uniform_filter(img, size)
+    mean_sq = uniform_filter(img**2, size)
+    var = mean_sq - mean**2
+
+    noise_var = np.nanmean(var)
+    weights = var / (var + noise_var)
+
+    return mean + weights * (img - mean)
+vv_filt_np = lee_filter(vv, size=7)
+vh_filt_np = lee_filter(vh, size=7)
+
+# Convertion of numpy arrays to xarray for preserving original metadata
+vv_filt = xr.DataArray(vv_filt_np, coords=vv.coords, dims=vv.dims, attrs=vv.attrs)
+vh_filt = xr.DataArray(vh_filt_np, coords=vh.coords, dims=vh.dims, attrs=vh.attrs)
+
+# vv_filt = gaussian_filter(vv.values, sigma=1)
+# vh_filt = gaussian_filter(vh.values, sigma=1)
+r = vv_filt / 600
+g = vh_filt / 270
+b = (vv_filt / vh_filt) / 9
+
+# RGB composite bands
+rgb_raw = xr.concat([r, g, b], dim="band")
+
+
+#  Normalizing the dynamic range of SAR 
+rgb_values = rgb_raw.values.astype("float32")
+p2, p98 = np.nanpercentile(rgb_values, (2, 98))
+rgb_values_normalized = np.clip((rgb_values - p2) / (p98 - p2), 0, 1)
+
+# New xarray DataArray for the normalized RGB 
+rgb_display = xr.DataArray(
+    rgb_values_normalized,
+    coords=rgb_raw.coords,
+    dims=rgb_raw.dims,
+    attrs=rgb_raw.attrs,
+)
+
+# Plotting SAR
+plt.figure(figsize=(8,8))
+plt.imshow(np.moveaxis(rgb_display.values, 0, -1))
+plt.axis("off")
+plt.title("Sentinel-1 SAR Composite with LEE Speckle Filtered")
+plt.show()
